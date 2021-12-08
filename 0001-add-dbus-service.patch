@@ -1,0 +1,1794 @@
+diff -Naur kylin-usb-creator-1.0.0/data/org.kylin-usb-creator-data.gschema.xml kylin-usb-creator-1.0.0~/data/org.kylin-usb-creator-data.gschema.xml
+--- kylin-usb-creator-1.0.0/data/org.kylin-usb-creator-data.gschema.xml	1970-01-01 08:00:00.000000000 +0800
++++ kylin-usb-creator-1.0.0~/data/org.kylin-usb-creator-data.gschema.xml	2021-12-07 21:19:30.909611942 +0800
+@@ -0,0 +1,9 @@
++<schemalist gettext-domain="kylin-usb-creator">
++     <schema id="org.kylin-usb-creator-data.settings"  path="/org/ukui/kylin-usb-creator/">
++        <key name="mode" type="s">
++            <default>"normal"</default>
++            <summary>"gsetting test key"</summary>
++            <description>test</description>
++        </key>
++      </schema>
++</schemalist>
+diff -Naur kylin-usb-creator-1.0.0/debian/changelog kylin-usb-creator-1.0.0~/debian/changelog
+--- kylin-usb-creator-1.0.0/debian/changelog	2021-01-05 17:04:45.000000000 +0800
++++ kylin-usb-creator-1.0.0~/debian/changelog	2021-12-07 21:19:30.050515990 +0800
+@@ -1,8 +1,8 @@
+ kylin-usb-creator (1.0.0-26kord) v101; urgency=medium
+ 
+-  * 移除程序外部透明顶级窗口，改为主题接管状态栏样式及阴影圆角。
+-  * 移除模块stylewidget、stylewidgetattribute、stylewidgetshadow。
+-  * 注册Dbus服务。
++  * 移除程序外部透明顶级窗口，改为主题接管状态栏样式及阴影圆角
++  * 移除模块stylewidget、stylewidgetattribute、stylewidgetshadow
++  * 注册Dbus服务
+ 
+  -- shixiaoshuo <shixiaoshuo@kylinos.cn>  Fri, 27 Nov 2020 12:24:52 +0800
+ 
+diff -Naur kylin-usb-creator-1.0.0/kylin-usb-creator.pro kylin-usb-creator-1.0.0~/kylin-usb-creator.pro
+--- kylin-usb-creator-1.0.0/kylin-usb-creator.pro	2021-01-05 17:04:45.000000000 +0800
++++ kylin-usb-creator-1.0.0~/kylin-usb-creator.pro	2021-12-07 21:19:30.006098673 +0800
+@@ -1,4 +1,4 @@
+-QT       += core gui dbus
++QT       += core gui dbus network
+ 
+ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
+ 
+@@ -21,6 +21,10 @@
+     src/mainwindow.cpp \
+     src/page1.cpp \
+     src/page2.cpp \
++    src/qtlocalpeer.cpp \
++    src/qtlockedfile.cpp \
++    src/qtlockedfile_unix.cpp \
++    src/qtsingleapplication.cpp \
+     src/stylecombobox.cpp \
+     src/rootauthdialog.cpp
+ 
+@@ -29,6 +33,9 @@
+     src/mainwindow.h \
+     src/page1.h \
+     src/page2.h \
++    src/qtlocalpeer.h \
++    src/qtlockedfile.h \
++    src/qtsingleapplication.h \
+     src/stylecombobox.h \
+     src/rootauthdialog.h
+ 
+@@ -41,7 +48,7 @@
+ icons.path = /usr/share/pixmaps/
+ 
+ # gsettings
+-schemes.file = /data/org.kylin-usb.creator.gschema.xml
++schemes.file = data/org.kylin-usb-creator-data.gschema.xml
+ schemes.path = /usr/share/glib-2.0/schemas/
+ 
+ desktop.path = /usr/share/applications
+diff -Naur kylin-usb-creator-1.0.0/src/dbusadaptor.cpp kylin-usb-creator-1.0.0~/src/dbusadaptor.cpp
+--- kylin-usb-creator-1.0.0/src/dbusadaptor.cpp	2021-01-05 17:04:45.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/dbusadaptor.cpp	2021-12-07 21:19:31.089447916 +0800
+@@ -31,5 +31,5 @@
+ 
+ void DbusAdaptor::showMainWindow()
+ {
+-    parent()->handleIconClickedSub();
++//    parent()->handleIconClickedSub();
+ }
+diff -Naur kylin-usb-creator-1.0.0/src/main.cpp kylin-usb-creator-1.0.0~/src/main.cpp
+--- kylin-usb-creator-1.0.0/src/main.cpp	2021-01-05 17:04:45.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/main.cpp	2021-12-07 21:19:31.094864662 +0800
+@@ -1,5 +1,6 @@
+ #include "mainwindow.h"
+ #include "dbusadaptor.h"
++#include "qtsingleapplication.h"
+ #define SHADOW 6//阴影宽度
+ #define BUTTONRADIUS 0//按钮圆角
+ #define SHADOWALPHA 0.16//阴影透明度
+@@ -11,29 +12,18 @@
+ #include <fcntl.h>
+ #include <QLibraryInfo>
+ #include <syslog.h>
+-void responseCommand(QApplication &a) //响应外部dbus命令
+-{
+-    //提供DBus接口，添加show参数
+-    QCommandLineParser parser;
+-    parser.setApplicationDescription(QCoreApplication::translate("main", "kylinusbcreator"));
+-    parser.addHelpOption();
+-    parser.addVersionOption();
+-
+-    QCommandLineOption swOption(QStringLiteral("show"),QCoreApplication::translate("main", "show kylin-usb-creator test"));
+-
+-    parser.addOptions({swOption});
+-    parser.process(a);
+ 
+-    if(parser.isSet(swOption) || !QDBusConnection::sessionBus().registerService("com.kylin.usbcreator"))
++// 拉起最小化窗口
++void activeMainwindow()
++{
++    qDebug()<<"gsetting state:"<<QGSettings::isSchemaInstalled(APPDATA);
++    if(QGSettings::isSchemaInstalled(APPDATA))
+     {
+-//        if(!a.isRunning())return;
+-            QDBusInterface *interface = new QDBusInterface("com.kylin.usbcreator",
+-                                                           "/com/kylin/usbcreator",
+-                                                           "com.kylin.usbcreator",
+-                                                           QDBusConnection::sessionBus(),
+-                                                           NULL);
+-
+-            interface->call(QStringLiteral("showMainWindow"));
++        QGSettings *p = new QGSettings(APPDATA);
++//        p->get()
++        qDebug()<<"main.cpp activeMainwindow value:"<<p->get("mode").toString();
++        p->set("mode","stat4");
++        qDebug()<<"main.cpp after set value:"<<p->get("mode").toString();
+     }
+ }
+ int main(int argc, char *argv[])
+@@ -42,68 +32,63 @@
+     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+     QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+ 
++    QtSingleApplication a(argc,argv);
+ 
+-    QApplication a(argc, argv);
+-    responseCommand(a);
+-    a.setWindowIcon(QIcon(":data/logo/96.png"));
+-
+-//    添加vnc支持
+-    QStringList homePath = QStandardPaths::standardLocations(QStandardPaths::HomeLocation);
+-    int fd = open(QString(homePath.at(0) + "/.config/kylin-usb-creator%1.lock").arg(getenv("DISPLAY")).toUtf8().data(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+-    if (fd < 0) { exit(1); }
+-    if (lockf(fd, F_TLOCK, 0)) {
+-        syslog(LOG_ERR, "Can't lock single file, kylin-usb-creator is already running!");
+-        qDebug()<<"Can't lock single file, kylin-usb-creator is already running!";
+-        exit(0);
+-    }
+-
+-
++//    TODO: 整合qt的标准翻译和自行定制的qm翻译
+ //    标准对话框汉化(QT标准翻译
+-#ifndef QT_NO_TRANSLATION
+-    QString translatorFileName = QLatin1String("qt_");
+-    translatorFileName += QLocale::system().name();
+-    QTranslator *translator = new QTranslator();
+-    if (translator->load(translatorFileName, QLibraryInfo::location(QLibraryInfo::TranslationsPath)))
+-        a.installTranslator(translator);
+-    else
+-        qDebug() << "Failed to load Chinese translation file.";
+-#endif
+-    // 应用内翻译
+-    QTranslator app_trans;
+-    QString locale = QLocale::system().name();
+-    QString trans_path;
+-    if(QDir("/usr/share/kylin-usb-creator/src/translations").exists()){
+-        trans_path = "/usr/share/kylin-usb-creator/translations";
+-    }else{
+-        trans_path = qApp->applicationDirPath() + ":/src/translations";
+-    }
+-    if(locale == "zh_CN"){
+-        qDebug()<<app_trans.load(":/src/translations/kylin-usb-creator_zh_CN.qm");
+-        if(!app_trans.load(":/src/translations/kylin-usb-creator_zh_CN.qm"))
+-        {
+-            syslog(LOG_ERR, "Load translation file kylin-usb-creator_zh_CN.qm error",trans_path);
++    #ifndef QT_NO_TRANSLATION
++        QString translatorFileName = QLatin1String("qt_");
++        translatorFileName += QLocale::system().name();
++        QTranslator *translator = new QTranslator();
++        if (translator->load(translatorFileName, QLibraryInfo::location(QLibraryInfo::TranslationsPath)))
++            a.installTranslator(translator);
++        else
++            qDebug() << "Failed to load Chinese translation file.";
++    #endif
++        // 应用内翻译
++        QTranslator app_trans;
++        QString locale = QLocale::system().name();
++        QString trans_path;
++        if(QDir("/usr/share/kylin-usb-creator/src/translations").exists()){
++            trans_path = "/usr/share/kylin-usb-creator/translations";
+         }else{
+-            a.installTranslator(&app_trans);
++            trans_path = qApp->applicationDirPath() + ":/src/translations";
+         }
+-    }else if(locale == "bo_CN")
+-    {
+-        if(!app_trans.load("kylin-usb-creator_bo_CN.qm",trans_path))
++        if(locale == "zh_CN"){
++            qDebug()<<app_trans.load(":/src/translations/kylin-usb-creator_zh_CN.qm");
++            if(!app_trans.load(":/src/translations/kylin-usb-creator_zh_CN.qm"))
++            {
++                syslog(LOG_ERR, "Load translation file kylin-usb-creator_zh_CN.qm error",trans_path);
++            }else{
++                a.installTranslator(&app_trans);
++            }
++        }else if(locale == "bo_CN")
+         {
+-            syslog(LOG_ERR, "Load translation file kylin-usb-creator_bo_CN.qm error",trans_path);
+-        }else{
+-            a.installTranslator(&app_trans);
++            if(!app_trans.load("kylin-usb-creator_bo_CN.qm",trans_path))
++            {
++                syslog(LOG_ERR, "Load translation file kylin-usb-creator_bo_CN.qm error",trans_path);
++            }else{
++                a.installTranslator(&app_trans);
++            }
+         }
++
++
++    if(a.isRunning()){
++//        a.sendMessage(nullptr);
++        activeMainwindow();
++        qDebug()<<"#### kylin-usb-creator is already running";
++        return EXIT_SUCCESS;
++    }else {
++        MainWindow w;
++        w.show();
++//        QObject::connect(&a,SIGNAL(messageReceived(const QString&)),&w,SLOT(handleIconClickedSub(const QString&)));
++        return a.exec();
+     }
++    a.setWindowIcon(QIcon(":data/logo/96.png"));
++
++
++
+ 
+-    MainWindow w;
+-    DbusAdaptor adaptor(&w);
+-    Q_UNUSED(adaptor);
+-    auto connection = QDBusConnection::sessionBus();
+-    qDebug()<<"建立DBus服务状态： "<< (connection.registerService("com.kylin.usbcreator")&&connection.registerObject("/com/kylin/usbcreator", &w));
+-
+-//    w.setAttribute(Qt::WA_TranslucentBackground, true);
+-//    w.setProperty("useSystemStyleBlur",true);
+-    w.show();
+ 
+     return a.exec();
+ }
+diff -Naur kylin-usb-creator-1.0.0/src/mainwindow.cpp kylin-usb-creator-1.0.0~/src/mainwindow.cpp
+--- kylin-usb-creator-1.0.0/src/mainwindow.cpp	2021-01-05 17:04:45.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/mainwindow.cpp	2021-12-07 21:19:31.067780931 +0800
+@@ -6,6 +6,8 @@
+     init();
+     myStyle();
+     initGsetting();
++    this->show();
++
+ }
+ 
+ MainWindow::~MainWindow()
+@@ -17,9 +19,21 @@
+     this->setFixedSize(680,467);
+ //    在屏幕中央显示
+     QRect availableGeometry = qApp->primaryScreen()->availableGeometry();
+-//    QRect availableGeometry = qApp->
+     this->move((availableGeometry.width()-this->width())/2,(availableGeometry.height()- this->height())/2);
+-
++    dbustimer = new QTimer();
++    connect(dbustimer,&QTimer::timeout,[=](){
++        test();
++//        dbustimer->stop();
++        qDebug()<<this;
++        qDebug()<<"show once time";
++    });
++//    dbustimer->start(3000);
++}
++void MainWindow::test()
++{
++    this->raise();
++    this->showNormal();
++    this->activateWindow();
+ }
+ void MainWindow::myStyle()
+ {
+@@ -31,8 +45,6 @@
+     connect(page2,&Page2::makeFinish,this,&MainWindow::makeFinish);
+     connect(page2,&Page2::returnMain,this,&MainWindow::returnMain);
+ 
+-
+-
+     //内部样式
+     QSize pointSize(8,8);
+     pointLable1=new QLabel;
+@@ -63,61 +75,61 @@
+     vlt->addLayout(hlt,1);
+     vlt->addSpacing(7);
+     this->setLayout(vlt);
+-
+     // 状态栏初始化部分，需要时打开注释
+ //    createTrayActions();
+ }
+ 
+ void MainWindow::initGsetting()
+ {
++    //应用主窗口状态
++    qDebug()<<":initGsetting QGSettings::isSchemaInstalled(APPDATA):"<<QGSettings::isSchemaInstalled(APPDATA);
++    if(QGSettings::isSchemaInstalled(APPDATA))
++    {
++        m_pGsettingAppData = new QGSettings(APPDATA);
++        connect(m_pGsettingAppData,&QGSettings::changed,[=](){
++            qDebug()<<"窗口拉起执行："<<this;
++            this->showNormal();
++            this->raise();
++            this->activateWindow();
++        });
++    }
++
++    // 主题适配
+     if(QGSettings::isSchemaInstalled(FITTHEMEWINDOW))
+     {
+-//        m_pGsettingThemeData = new QGSettings(KYLINUSBCREATORDATA);
+-//        if(1)
+-//        {
+-//            qDebug()<<"Local gsettings init success.";
+-//            page1->setThemeStyleLight();
+-//            page2->setThemeStyleLight();
+-//        }
+-        // 主题适配
+-        if(QGSettings::isSchemaInstalled(FITTHEMEWINDOW))
+-        {
+-            m_pGsettingThemeData = new QGSettings(FITTHEMEWINDOW);
++        m_pGsettingThemeData = new QGSettings(FITTHEMEWINDOW);
+ 
+-            connect(m_pGsettingThemeData,&QGSettings::changed,this, [=] (const QString &key)
++        connect(m_pGsettingThemeData,&QGSettings::changed,this, [=] (const QString &key)
++        {
++            if(key == "styleName")
+             {
+-                if(key == "styleName")
+-                {
+-
+-                        setThemeStyle();
+-                }
+-            });
+-            setThemeStyle(); //主题安装成功之后默认做一次主题状态的判断
+-        }
++                qDebug()<<"@@@@@@@@："<<this;
++                setThemeStyle();
++                this->showNormal();
++                this->raise();
++                this->activateWindow();
++            }
++        });
++        setThemeStyle(); //主题安装成功之后默认做一次主题状态的判断
+     }
+     return ;
+ }
+ 
+-
+ void MainWindow::setThemeStyle()
+ {
+     QString nowThemeStyle = m_pGsettingThemeData->get("styleName").toString();
+     if("ukui-dark" == nowThemeStyle || "ukui-black" == nowThemeStyle)
+     {
+-//        子类在这里调用对应方法做深色渲染
+-        qDebug()<<"深色渲染start";
+         page2->setThemeStyleDark();
+         this->setStyleSheet("background-color:rgba(31,32,34,1);");
+         page1->setThemeStyleDark();
+     }else{
+-//        子类在这里调用方法做对应浅色渲染
+-        qDebug()<<"浅色渲染start";
+         page1->setThemeStyleLight();
+         this->setStyleSheet("background-color:rgba(255,255,255,1);");
+         page2->setThemeStyleLight();
+     }
+-
+ }
++
+ void MainWindow::createTrayActions()
+ {
+     if(!QSystemTrayIcon::isSystemTrayAvailable())
+@@ -149,33 +161,19 @@
+ }
+ void MainWindow::handleIconClickedSub()
+ {
+-    qDebug()<<"MainWindow::handleIconClickedSub  iswindowminized:"<<this->isMinimized();
+-
+-//    QRect availableGeometry = qApp->primaryScreen()->availableGeometry();
+-//    this->move((availableGeometry.width() - this->width())/2, (availableGeometry.height() - this->height())/2);
++    QRect availableGeometry = qApp->primaryScreen()->availableGeometry();
++    this->move((availableGeometry.width() - this->width())/2, (availableGeometry.height() - this->height())/2);
+     this->showNormal();
+     this->raise();
+     this->activateWindow();
+-    qDebug()<<this->parent();
+ 
+-//    this->show();
+-
+-//    stackedWidget->showNormal();
+-//    stackedWidget->raise();
+-//    stackedWidget->activateWindow();
+-//    stackedWidget->show();
+-
+-
+-//    page1->showNormal();
+-//    page1->raise();
+-//    page1->activateWindow();
+-//    page1->show();
+ }
++
+ void MainWindow::makeFinish()
+ {
+-    if(!page1->ifStartBtnChange())
+-    {
+-    }
++//    if(!page1->ifStartBtnChange())
++//    {
++//    }
+     pointLable3->setStyleSheet("border-radius:4px;background:rgba(100, 105, 241, 1);");
+     pointLable2->setStyleSheet("border-radius:4px;background:rgba(151, 151, 151, 1);");
+     pointLable1->setStyleSheet("border-radius:4px;background:rgba(151, 151, 151, 1);");
+diff -Naur kylin-usb-creator-1.0.0/src/mainwindow.h kylin-usb-creator-1.0.0~/src/mainwindow.h
+--- kylin-usb-creator-1.0.0/src/mainwindow.h	2021-01-05 17:04:45.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/mainwindow.h	2021-12-07 21:19:31.040697200 +0800
+@@ -1,13 +1,12 @@
+ #ifndef MAINWINDOW_H
+ #define MAINWINDOW_H
+ #define FITTHEMEWINDOW "org.ukui.style"
+-#define KYLINUSBCREATORDATA "org.kylin-usb-creator-data.settings"
++#define APPDATA "org.kylin-usb-creator-data.settings"
+ #define WINDOWW 680 //窗口宽度
+ #define WINDOWH 510//窗口高度
+ #define TITLEH 40//标题栏高度
+ #define SHADOW 6//阴影宽度
+ #define WIDGETRADIUS 6//窗口圆角
+-//#define BUTTONRADIUS 4//按钮圆角
+ #define SHADOWALPHA 0.16//阴影透明度
+ 
+ #include "page1.h"
+@@ -26,7 +25,6 @@
+ public:
+     MainWindow(QWidget *parent = nullptr);
+     ~MainWindow();
+-    void handleIconClickedSub();
+ 
+ signals:
+     void setMakeStart();
+@@ -35,14 +33,19 @@
+     void makeStart(); //点击授权按钮后由页面1跳转到页面2
+     void makeFinish();
+     void returnMain();
++//    void handleIconClickedSub(const QString&);
+ //    void passwdCheck();
+ private:
+     void init(); //初始化mainwindow相关的设置
+     int changePage();
+     void myStyle();//设定样式
++    void test();
+     void createTrayActions();
+     void initGsetting();
+     void setThemeStyle();
++
++    void handleIconClickedSub();
++    QTimer *dbustimer = nullptr;
+     QStackedWidget *stackedWidget= nullptr;
+     //页面小圆点
+     QLabel *pointLable1 = nullptr;
+@@ -54,5 +57,6 @@
+     QTimer *timer;
+ //    bool isInPage2  = false; //程序是否处在页面2
+     QGSettings *m_pGsettingThemeData = nullptr;
++    QGSettings *m_pGsettingAppData  = nullptr;
+ };
+ #endif // MAINWINDOW_H
+diff -Naur kylin-usb-creator-1.0.0/src/page1.cpp kylin-usb-creator-1.0.0~/src/page1.cpp
+--- kylin-usb-creator-1.0.0/src/page1.cpp	2021-01-05 17:04:45.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/page1.cpp	2021-12-07 21:19:31.038530502 +0800
+@@ -2,7 +2,6 @@
+ 
+ Page1::Page1()
+ {
+-
+     initControlQss();//初始化样式
+     dialogInitControlQss();
+     getStorageInfo();//获取磁盘信息
+@@ -277,7 +276,7 @@
+             continue;
+         if(disk.device().contains("/dev/sr0")) //光盘不显示
+             continue;
+-        if(disk.device().contains("/dev/sda0")) //内置硬盘不显示
++        if(disk.device().contains("/dev/sda")) //内置硬盘不显示
+             continue;
+         if(disk.device().contains("/dev/nvm")) //nvme类型的设备不显示
+             continue;
+diff -Naur kylin-usb-creator-1.0.0/src/page2.h kylin-usb-creator-1.0.0~/src/page2.h
+--- kylin-usb-creator-1.0.0/src/page2.h	2021-01-05 17:04:45.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/page2.h	2021-12-07 21:19:31.064530884 +0800
+@@ -1,4 +1,3 @@
+-
+ #ifndef PAGE2_H
+ #define PAGE2_H
+ 
+diff -Naur kylin-usb-creator-1.0.0/src/qtlocalpeer.cpp kylin-usb-creator-1.0.0~/src/qtlocalpeer.cpp
+--- kylin-usb-creator-1.0.0/src/qtlocalpeer.cpp	1970-01-01 08:00:00.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/qtlocalpeer.cpp	2021-12-07 21:19:31.055864089 +0800
+@@ -0,0 +1,204 @@
++/****************************************************************************
++**
++** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
++** Contact: http://www.qt-project.org/legal
++**
++** This file is part of the Qt Solutions component.
++**
++** $QT_BEGIN_LICENSE:BSD$
++** You may use this file under the terms of the BSD license as follows:
++**
++** "Redistribution and use in source and binary forms, with or without
++** modification, are permitted provided that the following conditions are
++** met:
++**   * Redistributions of source code must retain the above copyright
++**     notice, this list of conditions and the following disclaimer.
++**   * Redistributions in binary form must reproduce the above copyright
++**     notice, this list of conditions and the following disclaimer in
++**     the documentation and/or other materials provided with the
++**     distribution.
++**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
++**     of its contributors may be used to endorse or promote products derived
++**     from this software without specific prior written permission.
++**
++**
++** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
++** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
++**
++** $QT_END_LICENSE$
++**
++****************************************************************************/
++
++
++#include "qtlocalpeer.h"
++#include <QCoreApplication>
++#include <QDataStream>
++#include <QTime>
++
++#if defined(Q_OS_WIN)
++#include <QLibrary>
++#include <qt_windows.h>
++typedef BOOL(WINAPI*PProcessIdToSessionId)(DWORD,DWORD*);
++static PProcessIdToSessionId pProcessIdToSessionId = 0;
++#endif
++#if defined(Q_OS_UNIX)
++#include <sys/types.h>
++#include <time.h>
++#include <unistd.h>
++#endif
++
++namespace QtLP_Private {
++#include "qtlockedfile.cpp"
++#if defined(Q_OS_WIN)
++#include "qtlockedfile_win.cpp"
++#else
++#include "qtlockedfile_unix.cpp"
++#endif
++}
++
++const char* QtLocalPeer::ack = "ack";
++
++QtLocalPeer::QtLocalPeer(QObject* parent, const QString &appId)
++    : QObject(parent), id(appId)
++{
++    QString prefix = id;
++    if (id.isEmpty()) {
++        id = QCoreApplication::applicationFilePath();
++#if defined(Q_OS_WIN)
++        id = id.toLower();
++#endif
++        prefix = id.section(QLatin1Char('/'), -1);
++    }
++    prefix.remove(QRegExp("[^a-zA-Z]"));
++    prefix.truncate(6);
++
++    QByteArray idc = id.toUtf8();
++    quint16 idNum = qChecksum(idc.constData(), idc.size());
++    socketName = QLatin1String("qtsingleapp-") + prefix
++                 + QLatin1Char('-') + QString::number(idNum, 16);
++
++#if defined(Q_OS_WIN)
++    if (!pProcessIdToSessionId) {
++        QLibrary lib("kernel32");
++        pProcessIdToSessionId = (PProcessIdToSessionId)lib.resolve("ProcessIdToSessionId");
++    }
++    if (pProcessIdToSessionId) {
++        DWORD sessionId = 0;
++        pProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
++        socketName += QLatin1Char('-') + QString::number(sessionId, 16);
++    }
++#else
++    socketName += QLatin1Char('-') + QString::number(::getuid(), 16);
++#endif
++
++    server = new QLocalServer(this);
++    QString lockName = QDir(QDir::tempPath()).absolutePath()
++                       + QLatin1Char('/') + socketName
++                       + QLatin1String("-lockfile");
++    lockFile.setFileName(lockName);
++    lockFile.open(QIODevice::ReadWrite);
++}
++
++
++
++bool QtLocalPeer::isClient()
++{
++    if (lockFile.isLocked())
++        return false;
++
++    if (!lockFile.lock(QtLP_Private::QtLockedFile::WriteLock, false))
++        return true;
++
++    bool res = server->listen(socketName);
++#if defined(Q_OS_UNIX) && (QT_VERSION >= QT_VERSION_CHECK(4,5,0))
++    // ### Workaround
++    if (!res && server->serverError() == QAbstractSocket::AddressInUseError) {
++        QFile::remove(QDir::cleanPath(QDir::tempPath())+QLatin1Char('/')+socketName);
++        res = server->listen(socketName);
++    }
++#endif
++    if (!res)
++        qWarning("QtSingleCoreApplication: listen on local socket failed, %s", qPrintable(server->errorString()));
++    QObject::connect(server, SIGNAL(newConnection()), SLOT(receiveConnection()));
++    return false;
++}
++
++
++bool QtLocalPeer::sendMessage(const QString &message, int timeout)
++{
++    if (!isClient())
++        return false;
++
++    QLocalSocket socket;
++    bool connOk = false;
++    for(int i = 0; i < 2; i++) {
++        // Try twice, in case the other instance is just starting up
++        socket.connectToServer(socketName);
++        connOk = socket.waitForConnected(timeout/2);
++        if (connOk || i)
++            break;
++        int ms = 250;
++#if defined(Q_OS_WIN)
++        Sleep(DWORD(ms));
++#else
++        struct timespec ts = { ms / 1000, (ms % 1000) * 1000 * 1000 };
++        nanosleep(&ts, NULL);
++#endif
++    }
++    if (!connOk)
++        return false;
++
++    QByteArray uMsg(message.toUtf8());
++    QDataStream ds(&socket);
++    ds.writeBytes(uMsg.constData(), uMsg.size());
++    bool res = socket.waitForBytesWritten(timeout);
++    if (res) {
++        res &= socket.waitForReadyRead(timeout);   // wait for ack
++        if (res)
++            res &= (socket.read(qstrlen(ack)) == ack);
++    }
++    return res;
++}
++
++
++void QtLocalPeer::receiveConnection()
++{
++    QLocalSocket* socket = server->nextPendingConnection();
++    if (!socket)
++        return;
++
++    while (socket->bytesAvailable() < (int)sizeof(quint32))
++        socket->waitForReadyRead();
++    QDataStream ds(socket);
++    QByteArray uMsg;
++    quint32 remaining;
++    ds >> remaining;
++    uMsg.resize(remaining);
++    int got = 0;
++    char* uMsgBuf = uMsg.data();
++    do {
++        got = ds.readRawData(uMsgBuf, remaining);
++        remaining -= got;
++        uMsgBuf += got;
++    } while (remaining && got >= 0 && socket->waitForReadyRead(2000));
++    if (got < 0) {
++        qWarning("QtLocalPeer: Message reception failed %s", socket->errorString().toLatin1().constData());
++        delete socket;
++        return;
++    }
++    QString message(QString::fromUtf8(uMsg));
++    socket->write(ack, qstrlen(ack));
++    socket->waitForBytesWritten(1000);
++    socket->waitForDisconnected(1000); // make sure client reads ack
++    delete socket;
++    emit messageReceived(message); //### (might take a long time to return)
++}
+diff -Naur kylin-usb-creator-1.0.0/src/qtlocalpeer.h kylin-usb-creator-1.0.0~/src/qtlocalpeer.h
+--- kylin-usb-creator-1.0.0/src/qtlocalpeer.h	1970-01-01 08:00:00.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/qtlocalpeer.h	2021-12-07 21:19:31.050447343 +0800
+@@ -0,0 +1,77 @@
++/****************************************************************************
++**
++** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
++** Contact: http://www.qt-project.org/legal
++**
++** This file is part of the Qt Solutions component.
++**
++** $QT_BEGIN_LICENSE:BSD$
++** You may use this file under the terms of the BSD license as follows:
++**
++** "Redistribution and use in source and binary forms, with or without
++** modification, are permitted provided that the following conditions are
++** met:
++**   * Redistributions of source code must retain the above copyright
++**     notice, this list of conditions and the following disclaimer.
++**   * Redistributions in binary form must reproduce the above copyright
++**     notice, this list of conditions and the following disclaimer in
++**     the documentation and/or other materials provided with the
++**     distribution.
++**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
++**     of its contributors may be used to endorse or promote products derived
++**     from this software without specific prior written permission.
++**
++**
++** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
++** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
++**
++** $QT_END_LICENSE$
++**
++****************************************************************************/
++
++#ifndef QTLOCALPEER_H
++#define QTLOCALPEER_H
++
++#include <QLocalServer>
++#include <QLocalSocket>
++#include <QDir>
++
++#include "qtlockedfile.h"
++
++class QtLocalPeer : public QObject
++{
++    Q_OBJECT
++
++public:
++    QtLocalPeer(QObject *parent = 0, const QString &appId = QString());
++    bool isClient();
++    bool sendMessage(const QString &message, int timeout);
++    QString applicationId() const
++        { return id; }
++
++Q_SIGNALS:
++    void messageReceived(const QString &message);
++
++protected Q_SLOTS:
++    void receiveConnection();
++
++protected:
++    QString id;
++    QString socketName;
++    QLocalServer* server;
++    QtLP_Private::QtLockedFile lockFile;
++
++private:
++    static const char* ack;
++};
++
++#endif // QTLOCALPEER_H
+diff -Naur kylin-usb-creator-1.0.0/src/qtlockedfile.cpp kylin-usb-creator-1.0.0~/src/qtlockedfile.cpp
+--- kylin-usb-creator-1.0.0/src/qtlockedfile.cpp	1970-01-01 08:00:00.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/qtlockedfile.cpp	2021-12-07 21:19:31.090531265 +0800
+@@ -0,0 +1,193 @@
++/****************************************************************************
++**
++** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
++** Contact: http://www.qt-project.org/legal
++**
++** This file is part of the Qt Solutions component.
++**
++** $QT_BEGIN_LICENSE:BSD$
++** You may use this file under the terms of the BSD license as follows:
++**
++** "Redistribution and use in source and binary forms, with or without
++** modification, are permitted provided that the following conditions are
++** met:
++**   * Redistributions of source code must retain the above copyright
++**     notice, this list of conditions and the following disclaimer.
++**   * Redistributions in binary form must reproduce the above copyright
++**     notice, this list of conditions and the following disclaimer in
++**     the documentation and/or other materials provided with the
++**     distribution.
++**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
++**     of its contributors may be used to endorse or promote products derived
++**     from this software without specific prior written permission.
++**
++**
++** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
++** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
++**
++** $QT_END_LICENSE$
++**
++****************************************************************************/
++
++#include "qtlockedfile.h"
++
++/*!
++    \class QtLockedFile
++
++    \brief The QtLockedFile class extends QFile with advisory locking
++    functions.
++
++    A file may be locked in read or write mode. Multiple instances of
++    \e QtLockedFile, created in multiple processes running on the same
++    machine, may have a file locked in read mode. Exactly one instance
++    may have it locked in write mode. A read and a write lock cannot
++    exist simultaneously on the same file.
++
++    The file locks are advisory. This means that nothing prevents
++    another process from manipulating a locked file using QFile or
++    file system functions offered by the OS. Serialization is only
++    guaranteed if all processes that access the file use
++    QLockedFile. Also, while holding a lock on a file, a process
++    must not open the same file again (through any API), or locks
++    can be unexpectedly lost.
++
++    The lock provided by an instance of \e QtLockedFile is released
++    whenever the program terminates. This is true even when the
++    program crashes and no destructors are called.
++*/
++
++/*! \enum QtLockedFile::LockMode
++
++    This enum describes the available lock modes.
++
++    \value ReadLock A read lock.
++    \value WriteLock A write lock.
++    \value NoLock Neither a read lock nor a write lock.
++*/
++
++/*!
++    Constructs an unlocked \e QtLockedFile object. This constructor
++    behaves in the same way as \e QFile::QFile().
++
++    \sa QFile::QFile()
++*/
++QtLockedFile::QtLockedFile()
++    : QFile()
++{
++#ifdef Q_OS_WIN
++    wmutex = 0;
++    rmutex = 0;
++#endif
++    m_lock_mode = NoLock;
++}
++
++/*!
++    Constructs an unlocked QtLockedFile object with file \a name. This
++    constructor behaves in the same way as \e QFile::QFile(const
++    QString&).
++
++    \sa QFile::QFile()
++*/
++QtLockedFile::QtLockedFile(const QString &name)
++    : QFile(name)
++{
++#ifdef Q_OS_WIN
++    wmutex = 0;
++    rmutex = 0;
++#endif
++    m_lock_mode = NoLock;
++}
++
++/*!
++  Opens the file in OpenMode \a mode.
++
++  This is identical to QFile::open(), with the one exception that the
++  Truncate mode flag is disallowed. Truncation would conflict with the
++  advisory file locking, since the file would be modified before the
++  write lock is obtained. If truncation is required, use resize(0)
++  after obtaining the write lock.
++
++  Returns true if successful; otherwise false.
++
++  \sa QFile::open(), QFile::resize()
++*/
++bool QtLockedFile::open(OpenMode mode)
++{
++    if (mode & QIODevice::Truncate) {
++        qWarning("QtLockedFile::open(): Truncate mode not allowed.");
++        return false;
++    }
++    return QFile::open(mode);
++}
++
++/*!
++    Returns \e true if this object has a in read or write lock;
++    otherwise returns \e false.
++
++    \sa lockMode()
++*/
++bool QtLockedFile::isLocked() const
++{
++    return m_lock_mode != NoLock;
++}
++
++/*!
++    Returns the type of lock currently held by this object, or \e
++    QtLockedFile::NoLock.
++
++    \sa isLocked()
++*/
++QtLockedFile::LockMode QtLockedFile::lockMode() const
++{
++    return m_lock_mode;
++}
++
++/*!
++    \fn bool QtLockedFile::lock(LockMode mode, bool block = true)
++
++    Obtains a lock of type \a mode. The file must be opened before it
++    can be locked.
++
++    If \a block is true, this function will block until the lock is
++    aquired. If \a block is false, this function returns \e false
++    immediately if the lock cannot be aquired.
++
++    If this object already has a lock of type \a mode, this function
++    returns \e true immediately. If this object has a lock of a
++    different type than \a mode, the lock is first released and then a
++    new lock is obtained.
++
++    This function returns \e true if, after it executes, the file is
++    locked by this object, and \e false otherwise.
++
++    \sa unlock(), isLocked(), lockMode()
++*/
++
++/*!
++    \fn bool QtLockedFile::unlock()
++
++    Releases a lock.
++
++    If the object has no lock, this function returns immediately.
++
++    This function returns \e true if, after it executes, the file is
++    not locked by this object, and \e false otherwise.
++
++    \sa lock(), isLocked(), lockMode()
++*/
++
++/*!
++    \fn QtLockedFile::~QtLockedFile()
++
++    Destroys the \e QtLockedFile object. If any locks were held, they
++    are released.
++*/
+diff -Naur kylin-usb-creator-1.0.0/src/qtlockedfile.h kylin-usb-creator-1.0.0~/src/qtlockedfile.h
+--- kylin-usb-creator-1.0.0/src/qtlockedfile.h	1970-01-01 08:00:00.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/qtlockedfile.h	2021-12-07 21:19:31.078614424 +0800
+@@ -0,0 +1,97 @@
++/****************************************************************************
++**
++** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
++** Contact: http://www.qt-project.org/legal
++**
++** This file is part of the Qt Solutions component.
++**
++** $QT_BEGIN_LICENSE:BSD$
++** You may use this file under the terms of the BSD license as follows:
++**
++** "Redistribution and use in source and binary forms, with or without
++** modification, are permitted provided that the following conditions are
++** met:
++**   * Redistributions of source code must retain the above copyright
++**     notice, this list of conditions and the following disclaimer.
++**   * Redistributions in binary form must reproduce the above copyright
++**     notice, this list of conditions and the following disclaimer in
++**     the documentation and/or other materials provided with the
++**     distribution.
++**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
++**     of its contributors may be used to endorse or promote products derived
++**     from this software without specific prior written permission.
++**
++**
++** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
++** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
++**
++** $QT_END_LICENSE$
++**
++****************************************************************************/
++
++#ifndef QTLOCKEDFILE_H
++#define QTLOCKEDFILE_H
++
++#include <QFile>
++#ifdef Q_OS_WIN
++#include <QVector>
++#endif
++
++#if defined(Q_OS_WIN)
++#  if !defined(QT_QTLOCKEDFILE_EXPORT) && !defined(QT_QTLOCKEDFILE_IMPORT)
++#    define QT_QTLOCKEDFILE_EXPORT
++#  elif defined(QT_QTLOCKEDFILE_IMPORT)
++#    if defined(QT_QTLOCKEDFILE_EXPORT)
++#      undef QT_QTLOCKEDFILE_EXPORT
++#    endif
++#    define QT_QTLOCKEDFILE_EXPORT __declspec(dllimport)
++#  elif defined(QT_QTLOCKEDFILE_EXPORT)
++#    undef QT_QTLOCKEDFILE_EXPORT
++#    define QT_QTLOCKEDFILE_EXPORT __declspec(dllexport)
++#  endif
++#else
++#  define QT_QTLOCKEDFILE_EXPORT
++#endif
++
++namespace QtLP_Private {
++
++class QT_QTLOCKEDFILE_EXPORT QtLockedFile : public QFile
++{
++public:
++    enum LockMode { NoLock = 0, ReadLock, WriteLock };
++
++    QtLockedFile();
++    QtLockedFile(const QString &name);
++    ~QtLockedFile();
++
++    bool open(OpenMode mode);
++
++    bool lock(LockMode mode, bool block = true);
++    bool unlock();
++    bool isLocked() const;
++    LockMode lockMode() const;
++
++private:
++#ifdef Q_OS_WIN
++    Qt::HANDLE wmutex;
++    Qt::HANDLE rmutex;
++    QVector<Qt::HANDLE> rmutexes;
++    QString mutexname;
++
++    Qt::HANDLE getMutexHandle(int idx, bool doCreate);
++    bool waitMutex(Qt::HANDLE mutex, bool doBlock);
++
++#endif
++    LockMode m_lock_mode;
++};
++}
++#endif
+diff -Naur kylin-usb-creator-1.0.0/src/qtlockedfile_unix.cpp kylin-usb-creator-1.0.0~/src/qtlockedfile_unix.cpp
+--- kylin-usb-creator-1.0.0/src/qtlockedfile_unix.cpp	1970-01-01 08:00:00.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/qtlockedfile_unix.cpp	2021-12-07 21:19:31.061280836 +0800
+@@ -0,0 +1,115 @@
++/****************************************************************************
++**
++** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
++** Contact: http://www.qt-project.org/legal
++**
++** This file is part of the Qt Solutions component.
++**
++** $QT_BEGIN_LICENSE:BSD$
++** You may use this file under the terms of the BSD license as follows:
++**
++** "Redistribution and use in source and binary forms, with or without
++** modification, are permitted provided that the following conditions are
++** met:
++**   * Redistributions of source code must retain the above copyright
++**     notice, this list of conditions and the following disclaimer.
++**   * Redistributions in binary form must reproduce the above copyright
++**     notice, this list of conditions and the following disclaimer in
++**     the documentation and/or other materials provided with the
++**     distribution.
++**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
++**     of its contributors may be used to endorse or promote products derived
++**     from this software without specific prior written permission.
++**
++**
++** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
++** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
++**
++** $QT_END_LICENSE$
++**
++****************************************************************************/
++
++#include <string.h>
++#include <errno.h>
++#include <unistd.h>
++#include <fcntl.h>
++
++#include "qtlockedfile.h"
++
++bool QtLockedFile::lock(LockMode mode, bool block)
++{
++    if (!isOpen()) {
++        qWarning("QtLockedFile::lock(): file is not opened");
++        return false;
++    }
++ 
++    if (mode == NoLock)
++        return unlock();
++           
++    if (mode == m_lock_mode)
++        return true;
++
++    if (m_lock_mode != NoLock)
++        unlock();
++
++    struct flock fl;
++    fl.l_whence = SEEK_SET;
++    fl.l_start = 0;
++    fl.l_len = 0;
++    fl.l_type = (mode == ReadLock) ? F_RDLCK : F_WRLCK;
++    int cmd = block ? F_SETLKW : F_SETLK;
++    int ret = fcntl(handle(), cmd, &fl);
++    
++    if (ret == -1) {
++        if (errno != EINTR && errno != EAGAIN)
++            qWarning("QtLockedFile::lock(): fcntl: %s", strerror(errno));
++        return false;
++    }
++
++    
++    m_lock_mode = mode;
++    return true;
++}
++
++
++bool QtLockedFile::unlock()
++{
++    if (!isOpen()) {
++        qWarning("QtLockedFile::unlock(): file is not opened");
++        return false;
++    }
++
++    if (!isLocked())
++        return true;
++
++    struct flock fl;
++    fl.l_whence = SEEK_SET;
++    fl.l_start = 0;
++    fl.l_len = 0;
++    fl.l_type = F_UNLCK;
++    int ret = fcntl(handle(), F_SETLKW, &fl);
++    
++    if (ret == -1) {
++        qWarning("QtLockedFile::lock(): fcntl: %s", strerror(errno));
++        return false;
++    }
++    
++    m_lock_mode = NoLock;
++    return true;
++}
++
++QtLockedFile::~QtLockedFile()
++{
++    if (isOpen())
++        unlock();
++}
++
+diff -Naur kylin-usb-creator-1.0.0/src/qtsingleapplication.cpp kylin-usb-creator-1.0.0~/src/qtsingleapplication.cpp
+--- kylin-usb-creator-1.0.0/src/qtsingleapplication.cpp	1970-01-01 08:00:00.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/qtsingleapplication.cpp	2021-12-07 21:19:31.074281027 +0800
+@@ -0,0 +1,347 @@
++/****************************************************************************
++**
++** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
++** Contact: http://www.qt-project.org/legal
++**
++** This file is part of the Qt Solutions component.
++**
++** $QT_BEGIN_LICENSE:BSD$
++** You may use this file under the terms of the BSD license as follows:
++**
++** "Redistribution and use in source and binary forms, with or without
++** modification, are permitted provided that the following conditions are
++** met:
++**   * Redistributions of source code must retain the above copyright
++**     notice, this list of conditions and the following disclaimer.
++**   * Redistributions in binary form must reproduce the above copyright
++**     notice, this list of conditions and the following disclaimer in
++**     the documentation and/or other materials provided with the
++**     distribution.
++**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
++**     of its contributors may be used to endorse or promote products derived
++**     from this software without specific prior written permission.
++**
++**
++** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
++** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
++**
++** $QT_END_LICENSE$
++**
++****************************************************************************/
++
++
++#include "qtsingleapplication.h"
++#include "qtlocalpeer.h"
++#include <QWidget>
++
++
++/*!
++    \class QtSingleApplication qtsingleapplication.h
++    \brief The QtSingleApplication class provides an API to detect and
++    communicate with running instances of an application.
++
++    This class allows you to create applications where only one
++    instance should be running at a time. I.e., if the user tries to
++    launch another instance, the already running instance will be
++    activated instead. Another usecase is a client-server system,
++    where the first started instance will assume the role of server,
++    and the later instances will act as clients of that server.
++
++    By default, the full path of the executable file is used to
++    determine whether two processes are instances of the same
++    application. You can also provide an explicit identifier string
++    that will be compared instead.
++
++    The application should create the QtSingleApplication object early
++    in the startup phase, and call isRunning() to find out if another
++    instance of this application is already running. If isRunning()
++    returns false, it means that no other instance is running, and
++    this instance has assumed the role as the running instance. In
++    this case, the application should continue with the initialization
++    of the application user interface before entering the event loop
++    with exec(), as normal.
++
++    The messageReceived() signal will be emitted when the running
++    application receives messages from another instance of the same
++    application. When a message is received it might be helpful to the
++    user to raise the application so that it becomes visible. To
++    facilitate this, QtSingleApplication provides the
++    setActivationWindow() function and the activateWindow() slot.
++
++    If isRunning() returns true, another instance is already
++    running. It may be alerted to the fact that another instance has
++    started by using the sendMessage() function. Also data such as
++    startup parameters (e.g. the name of the file the user wanted this
++    new instance to open) can be passed to the running instance with
++    this function. Then, the application should terminate (or enter
++    client mode).
++
++    If isRunning() returns true, but sendMessage() fails, that is an
++    indication that the running instance is frozen.
++
++    Here's an example that shows how to convert an existing
++    application to use QtSingleApplication. It is very simple and does
++    not make use of all QtSingleApplication's functionality (see the
++    examples for that).
++
++    \code
++    // Original
++    int main(int argc, char **argv)
++    {
++        QApplication app(argc, argv);
++
++        MyMainWidget mmw;
++        mmw.show();
++        return app.exec();
++    }
++
++    // Single instance
++    int main(int argc, char **argv)
++    {
++        QtSingleApplication app(argc, argv);
++
++        if (app.isRunning())
++            return !app.sendMessage(someDataString);
++
++        MyMainWidget mmw;
++        app.setActivationWindow(&mmw);
++        mmw.show();
++        return app.exec();
++    }
++    \endcode
++
++    Once this QtSingleApplication instance is destroyed (normally when
++    the process exits or crashes), when the user next attempts to run the
++    application this instance will not, of course, be encountered. The
++    next instance to call isRunning() or sendMessage() will assume the
++    role as the new running instance.
++
++    For console (non-GUI) applications, QtSingleCoreApplication may be
++    used instead of this class, to avoid the dependency on the QtGui
++    library.
++
++    \sa QtSingleCoreApplication
++*/
++
++
++void QtSingleApplication::sysInit(const QString &appId)
++{
++    actWin = 0;
++    peer = new QtLocalPeer(this, appId);
++    connect(peer, SIGNAL(messageReceived(const QString&)), SIGNAL(messageReceived(const QString&)));
++}
++
++
++/*!
++    Creates a QtSingleApplication object. The application identifier
++    will be QCoreApplication::applicationFilePath(). \a argc, \a
++    argv, and \a GUIenabled are passed on to the QAppliation constructor.
++
++    If you are creating a console application (i.e. setting \a
++    GUIenabled to false), you may consider using
++    QtSingleCoreApplication instead.
++*/
++
++QtSingleApplication::QtSingleApplication(int &argc, char **argv, bool GUIenabled)
++    : QApplication(argc, argv, GUIenabled)
++{
++    sysInit();
++}
++
++
++/*!
++    Creates a QtSingleApplication object with the application
++    identifier \a appId. \a argc and \a argv are passed on to the
++    QAppliation constructor.
++*/
++
++QtSingleApplication::QtSingleApplication(const QString &appId, int &argc, char **argv)
++    : QApplication(argc, argv)
++{
++    sysInit(appId);
++}
++
++#if QT_VERSION < 0x050000
++
++/*!
++    Creates a QtSingleApplication object. The application identifier
++    will be QCoreApplication::applicationFilePath(). \a argc, \a
++    argv, and \a type are passed on to the QAppliation constructor.
++*/
++QtSingleApplication::QtSingleApplication(int &argc, char **argv, Type type)
++    : QApplication(argc, argv, type)
++{
++    sysInit();
++}
++
++
++#  if defined(Q_WS_X11)
++/*!
++  Special constructor for X11, ref. the documentation of
++  QApplication's corresponding constructor. The application identifier
++  will be QCoreApplication::applicationFilePath(). \a dpy, \a visual,
++  and \a cmap are passed on to the QApplication constructor.
++*/
++QtSingleApplication::QtSingleApplication(Display* dpy, Qt::HANDLE visual, Qt::HANDLE cmap)
++    : QApplication(dpy, visual, cmap)
++{
++    sysInit();
++}
++
++/*!
++  Special constructor for X11, ref. the documentation of
++  QApplication's corresponding constructor. The application identifier
++  will be QCoreApplication::applicationFilePath(). \a dpy, \a argc, \a
++  argv, \a visual, and \a cmap are passed on to the QApplication
++  constructor.
++*/
++QtSingleApplication::QtSingleApplication(Display *dpy, int &argc, char **argv, Qt::HANDLE visual, Qt::HANDLE cmap)
++    : QApplication(dpy, argc, argv, visual, cmap)
++{
++    sysInit();
++}
++
++/*!
++  Special constructor for X11, ref. the documentation of
++  QApplication's corresponding constructor. The application identifier
++  will be \a appId. \a dpy, \a argc, \a
++  argv, \a visual, and \a cmap are passed on to the QApplication
++  constructor.
++*/
++QtSingleApplication::QtSingleApplication(Display* dpy, const QString &appId, int argc, char **argv, Qt::HANDLE visual, Qt::HANDLE cmap)
++    : QApplication(dpy, argc, argv, visual, cmap)
++{
++    sysInit(appId);
++}
++#  endif // Q_WS_X11
++#endif // QT_VERSION < 0x050000
++
++
++/*!
++    Returns true if another instance of this application is running;
++    otherwise false.
++
++    This function does not find instances of this application that are
++    being run by a different user (on Windows: that are running in
++    another session).
++
++    \sa sendMessage()
++*/
++
++bool QtSingleApplication::isRunning()
++{
++    return peer->isClient();
++}
++
++
++/*!
++    Tries to send the text \a message to the currently running
++    instance. The QtSingleApplication object in the running instance
++    will emit the messageReceived() signal when it receives the
++    message.
++
++    This function returns true if the message has been sent to, and
++    processed by, the current instance. If there is no instance
++    currently running, or if the running instance fails to process the
++    message within \a timeout milliseconds, this function return false.
++
++    \sa isRunning(), messageReceived()
++*/
++bool QtSingleApplication::sendMessage(const QString &message, int timeout)
++{
++    return peer->sendMessage(message, timeout);
++}
++
++
++/*!
++    Returns the application identifier. Two processes with the same
++    identifier will be regarded as instances of the same application.
++*/
++QString QtSingleApplication::id() const
++{
++    return peer->applicationId();
++}
++
++
++/*!
++  Sets the activation window of this application to \a aw. The
++  activation window is the widget that will be activated by
++  activateWindow(). This is typically the application's main window.
++
++  If \a activateOnMessage is true (the default), the window will be
++  activated automatically every time a message is received, just prior
++  to the messageReceived() signal being emitted.
++
++  \sa activateWindow(), messageReceived()
++*/
++
++void QtSingleApplication::setActivationWindow(QWidget* aw, bool activateOnMessage)
++{
++    actWin = aw;
++    if (activateOnMessage)
++        connect(peer, SIGNAL(messageReceived(const QString&)), this, SLOT(activateWindow()));
++    else
++        disconnect(peer, SIGNAL(messageReceived(const QString&)), this, SLOT(activateWindow()));
++}
++
++
++/*!
++    Returns the applications activation window if one has been set by
++    calling setActivationWindow(), otherwise returns 0.
++
++    \sa setActivationWindow()
++*/
++QWidget* QtSingleApplication::activationWindow() const
++{
++    return actWin;
++}
++
++
++/*!
++  De-minimizes, raises, and activates this application's activation window.
++  This function does nothing if no activation window has been set.
++
++  This is a convenience function to show the user that this
++  application instance has been activated when he has tried to start
++  another instance.
++
++  This function should typically be called in response to the
++  messageReceived() signal. By default, that will happen
++  automatically, if an activation window has been set.
++
++  \sa setActivationWindow(), messageReceived(), initialize()
++*/
++void QtSingleApplication::activateWindow()
++{
++    if (actWin) {
++        actWin->setWindowState(actWin->windowState() & ~Qt::WindowMinimized);
++        actWin->raise();
++        actWin->activateWindow();
++    }
++}
++
++
++/*!
++    \fn void QtSingleApplication::messageReceived(const QString& message)
++
++    This signal is emitted when the current instance receives a \a
++    message from another instance of this application.
++
++    \sa sendMessage(), setActivationWindow(), activateWindow()
++*/
++
++
++/*!
++    \fn void QtSingleApplication::initialize(bool dummy = true)
++
++    \obsolete
++*/
+diff -Naur kylin-usb-creator-1.0.0/src/qtsingleapplication.h kylin-usb-creator-1.0.0~/src/qtsingleapplication.h
+--- kylin-usb-creator-1.0.0/src/qtsingleapplication.h	1970-01-01 08:00:00.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/qtsingleapplication.h	2021-12-07 21:19:31.034197105 +0800
+@@ -0,0 +1,105 @@
++/****************************************************************************
++**
++** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
++** Contact: http://www.qt-project.org/legal
++**
++** This file is part of the Qt Solutions component.
++**
++** $QT_BEGIN_LICENSE:BSD$
++** You may use this file under the terms of the BSD license as follows:
++**
++** "Redistribution and use in source and binary forms, with or without
++** modification, are permitted provided that the following conditions are
++** met:
++**   * Redistributions of source code must retain the above copyright
++**     notice, this list of conditions and the following disclaimer.
++**   * Redistributions in binary form must reproduce the above copyright
++**     notice, this list of conditions and the following disclaimer in
++**     the documentation and/or other materials provided with the
++**     distribution.
++**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
++**     of its contributors may be used to endorse or promote products derived
++**     from this software without specific prior written permission.
++**
++**
++** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
++** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
++**
++** $QT_END_LICENSE$
++**
++****************************************************************************/
++
++#ifndef QTSINGLEAPPLICATION_H
++#define QTSINGLEAPPLICATION_H
++
++#include <QApplication>
++
++class QtLocalPeer;
++
++#if defined(Q_OS_WIN)
++#  if !defined(QT_QTSINGLEAPPLICATION_EXPORT) && !defined(QT_QTSINGLEAPPLICATION_IMPORT)
++#    define QT_QTSINGLEAPPLICATION_EXPORT
++#  elif defined(QT_QTSINGLEAPPLICATION_IMPORT)
++#    if defined(QT_QTSINGLEAPPLICATION_EXPORT)
++#      undef QT_QTSINGLEAPPLICATION_EXPORT
++#    endif
++#    define QT_QTSINGLEAPPLICATION_EXPORT __declspec(dllimport)
++#  elif defined(QT_QTSINGLEAPPLICATION_EXPORT)
++#    undef QT_QTSINGLEAPPLICATION_EXPORT
++#    define QT_QTSINGLEAPPLICATION_EXPORT __declspec(dllexport)
++#  endif
++#else
++#  define QT_QTSINGLEAPPLICATION_EXPORT
++#endif
++
++class QT_QTSINGLEAPPLICATION_EXPORT QtSingleApplication : public QApplication
++{
++    Q_OBJECT
++
++public:
++    QtSingleApplication(int &argc, char **argv, bool GUIenabled = true);
++    QtSingleApplication(const QString &id, int &argc, char **argv);
++#if QT_VERSION < 0x050000
++    QtSingleApplication(int &argc, char **argv, Type type);
++#  if defined(Q_WS_X11)
++    QtSingleApplication(Display* dpy, Qt::HANDLE visual = 0, Qt::HANDLE colormap = 0);
++    QtSingleApplication(Display *dpy, int &argc, char **argv, Qt::HANDLE visual = 0, Qt::HANDLE cmap= 0);
++    QtSingleApplication(Display* dpy, const QString &appId, int argc, char **argv, Qt::HANDLE visual = 0, Qt::HANDLE colormap = 0);
++#  endif // Q_WS_X11
++#endif // QT_VERSION < 0x050000
++
++    bool isRunning();
++    QString id() const;
++
++    void setActivationWindow(QWidget* aw, bool activateOnMessage = true);
++    QWidget* activationWindow() const;
++
++    // Obsolete:
++    void initialize(bool dummy = true)
++        { isRunning(); Q_UNUSED(dummy) }
++
++public Q_SLOTS:
++    bool sendMessage(const QString &message, int timeout = 5000);
++    void activateWindow();
++
++
++Q_SIGNALS:
++    void messageReceived(const QString &message);
++
++
++private:
++    void sysInit(const QString &appId = QString());
++    QtLocalPeer *peer;
++    QWidget *actWin;
++};
++
++#endif // QTSINGLEAPPLICATION_H
+diff -Naur kylin-usb-creator-1.0.0/src/stylecombobox.cpp kylin-usb-creator-1.0.0~/src/stylecombobox.cpp
+--- kylin-usb-creator-1.0.0/src/stylecombobox.cpp	2021-01-05 17:04:45.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/stylecombobox.cpp	2021-12-07 21:19:31.059114137 +0800
+@@ -21,6 +21,7 @@
+     hlt->addWidget(text,9);
+     hlt->addWidget(icon);
+ 
++    //下拉弹窗以及阴影绘制
+     listWidget=new QListWidget;
+     listWidget->setWindowFlag(Qt::FramelessWindowHint);  // 无边框
+     listWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); //关闭水平滚动条
+@@ -48,48 +49,44 @@
+ {
+     if(!isDiskListOpen)
+     {
+-//        deleteShadow();
+         closeListWidget();
+         int listWidgetHeight=listWidget->count() * ITEMHIGHT + SHADOW;
+         listWidget->setFixedHeight(listWidgetHeight);
+         listWidget->setFixedWidth(UDISKLISTWIDGETWIDTH);
+-//        swa.setH(listWidgetHeight);
+-//        swa.h = listWidgetHeight + SHADOW;
+-//        swa.w = UDISKLISTWIDGETWIDTH + 8;
+-        //设置阴影
+-//        swshadow =new StyleWidgetShadow(swa);
+-//        QVBoxLayout *vblayout=new QVBoxLayout(swshadow);
++
+         QPoint point= pushButton->mapToGlobal(QPoint(0,0));
+-//        vblayout->setMargin(10);//控件间距
+-//        vblayout->setSpacing(10);//控件间距
+-//        vblayout->addWidget(listWidget);
+         icon->setStyleSheet("border-image:url(:/data/comboboxIcon_c.png);border:0px;");
+         if(LIGHTTHEME == themeStatus){
+             pushButton->setStyleSheet(".QPushButton{background-color:#fff;border:1px solid rgba(100, 105, 241, 1);}");
+-//            swshadow->setStyleSheet("border:1px solid rgba(255,255,255,1);border-radius:4px;background-color:rgba(255,255,255,1);");
+-//            swshadow->setStyleSheet("border:1px solid rgba(255,255,255,0);border-radius:4px;background-color:rgba(255,255,255,1);");
++//            .QListWidget{border:1px solid rgba(255,255,255,1);}"
+             listWidget->setStyleSheet("QListWidget::Item{background-color:rgba(255,255,255,1);border-radius:2px;padding-left:20px;color:rgba(96,98,102,1);}"
+                                       "QListWidget::Item:hover{background-color:rgba(246,246,246,1);}");
+         }else if(DARKTHEME == themeStatus){
+             pushButton->setStyleSheet(".QPushButton{background-color:rgba(31,32,34,1);border:1px solid rgba(100,105,241,1);border-radius:4px;color:rgba(143,417,153,1);}");
+-//            swshadow->setStyleSheet("border:1px solid rgba(61,61,65,1);border-radius:4px;background-color:rgba(61,61,65,1);");
+             listWidget->setStyleSheet("QListWidget::Item{background-color:rgba(61,61,65,1);border-radius:2px;color:rgba(249,249,249,1);padding-left:20px;}"
+                                       "QListWidget::Item:hover{background-color:rgba(72,72,76,1);color:rgba(249,249,249,1);}");
+         }
+-        listWidget->move(point.rx()-SHADOW/2,point.ry()+pushButton->height()+ SHADOW);
++        listWidget->move(point.rx()-SHADOW/3 + 2,point.ry()+pushButton->height()+ SHADOW);
+ 
+-//        swshadow->show();
+-//        listWidget->move(SHADOW/2,SHADOW);
+         listWidget->show();
+         isDiskListOpen = true;
+     }
+     else
+     {
+-//        deleteShadow();
+         isDiskListOpen = false;
++
++        icon->setStyleSheet("border-image:url(:/data/comboboxIcon_d.png);border:0px;");
++        if(LIGHTTHEME == themeStatus){
++            pushButton->setStyleSheet(".QPushButton{background-color:#fff;border:1px solid rgba(192, 196,204,1);border-radius:4px;}"
++                                  ".QPushButton:hover{background-color:#fff;border:1px solid rgba(192,196,204,1);border-radius:4px;}");
++        }else if(DARKTHEME == themeStatus){
++            pushButton->setStyleSheet(".QPushButton{background-color:rgba(31,32,34,1);border:1px solid rgba(61,61,65,1);border-radius:4px;}"
++                                  ".QPushButton:hover{background-color:rgba(31,32,34,1);border:1px solid rgba(61,61,65,1);border-radius:4px;}");
++        }
+     }
+ }
+ 
++
+ void StyleComboBox::addItem(QString lable, QString data)
+ {
+     QListWidgetItem *item=new QListWidgetItem;
+@@ -101,22 +98,6 @@
+     listWidget->addItem(item);
+ }
+ 
+-//void StyleComboBox::deleteShadow()
+-//{
+-//    if(swshadow!=nullptr)
+-//    {
+-//        swshadow->close();
+-//        icon->setStyleSheet("border-image:url(:/data/comboboxIcon_d.png);border:0px;");
+-//        if(LIGHTTHEME == themeStatus){
+-//            pushButton->setStyleSheet(".QPushButton{background-color:#fff;border:1px solid rgba(192, 196,204,1);border-radius:4px;}"
+-//                                  ".QPushButton:hover{background-color:#fff;border:1px solid rgba(192,196,204,1);border-radius:4px;}");
+-//        }else if(DARKTHEME == themeStatus){
+-//            pushButton->setStyleSheet(".QPushButton{background-color:rgba(31,32,34,1);border:1px solid rgba(61,61,65,1);border-radius:4px;}"
+-//                                  ".QPushButton:hover{background-color:rgba(31,32,34,1);border:1px solid rgba(61,61,65,1);border-radius:4px;}");
+-//        }
+-//    }
+-//}
+-
+ void StyleComboBox::closeListWidget()
+ {
+     icon->setStyleSheet("border-image:url(:/data/comboboxIcon_d.png);border:0px;");
+@@ -133,7 +114,6 @@
+ {
+     text->setText(item->text());
+     text->setStatusTip(item->statusTip());
+-//    deleteShadow();
+     closeListWidget();
+ }
+ 
+diff -Naur kylin-usb-creator-1.0.0/src/stylecombobox.h kylin-usb-creator-1.0.0~/src/stylecombobox.h
+--- kylin-usb-creator-1.0.0/src/stylecombobox.h	2021-01-05 17:04:45.000000000 +0800
++++ kylin-usb-creator-1.0.0~/src/stylecombobox.h	2021-12-07 21:19:31.027697009 +0800
+@@ -18,12 +18,9 @@
+ {
+     Q_OBJECT
+ public:
+-//    explicit StyleComboBox(StyleWidgetAttribute scb_swa);
+     explicit StyleComboBox();
+-//    void deleteShadow();
+     void closeListWidget();
+     QListWidget *listWidget = nullptr;//U盘列表列表部分
+-//    QListWidget *menuListWidget = nullptr;//菜单列表部分
+     void addItem(QString lable, QString data);//添加到列表
+     void clearDiskList(); //清空U盘的listWidget
+     void setThemeDark(); //深色模式
+@@ -41,7 +38,6 @@
+ private:
+     QPushButton *pushButton = nullptr;//点击部分
+     void on_diskButton_click(); //U盘栏点击事件
+-//    void on_menuButton_click(); //菜单栏点击事件
+     bool isDiskListOpen = false;
+     bool mouseInListWidget=false;
+     QLabel *text=nullptr; // U盘框选中的部分
