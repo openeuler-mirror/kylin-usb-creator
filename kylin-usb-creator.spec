@@ -1,13 +1,14 @@
 %define debug_package %{nil}
 Name:           kylin-usb-creator
 Version:        1.0.0
-Release:        2
+Release:        3
 Summary:        kylin-usb-creator
 License:        GPL-3+
 URL:            http://www.ukui.org
 Source0:        %{name}-%{version}.tar.gz
 
 patch0: 0001-add-dbus-service.patch
+patch1: fix-bug-min-window-logic.patch
 
 BuildRequires:  qt5-qttools-devel
 BuildRequires:  qt5-qtscript-devel
@@ -24,6 +25,7 @@ BuildRequires:  gsettings-qt-devel
 %prep
 %setup -q
 %patch0 -p1
+%patch1 -p1
 
 %build
 %{qmake_qt5} %{_qt5_qmake_flags} CONFIG+=enable-by-default  kylin-usb-creator.pro
@@ -50,6 +52,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_datadir}/pixmaps/kylin-usb-creator.png
 
 %changelog
+* Fri Dec 10 2021 douyan <douyan@kylinos.cn> - 1.0.0-3
+- fix min window logic
+
 * Wed Dec 8 2021 douyan <douyan@kylinos.cn> - 1.0.0-2
 - add dbus service
 

@@ -1,0 +1,133 @@
+diff -Naur kylin-usb-creator-1.0.0/debian/changelog kylin-usb-creator-1.0.0~/debian/changelog
+--- kylin-usb-creator-1.0.0/debian/changelog	2021-12-09 14:37:53.464467473 +0800
++++ kylin-usb-creator-1.0.0~/debian/changelog	2021-12-09 15:20:44.713299353 +0800
+@@ -1,3 +1,9 @@
++kylin-usb-creator (1.0.0-27kord) v101; urgency=medium
++
++  * 解决了BUG#24046 程序正在运行且处于最小化状态时，可以通过点击菜单栏图标拉起
++
++ -- shixiaoshuo <shixiaoshuo@kylinos.cn>  Mon, 30 Nov 2020 15:38:52 +0800
++
+ kylin-usb-creator (1.0.0-26kord) v101; urgency=medium
+ 
+   * 移除程序外部透明顶级窗口，改为主题接管状态栏样式及阴影圆角
+diff -Naur kylin-usb-creator-1.0.0/src/main.cpp kylin-usb-creator-1.0.0~/src/main.cpp
+--- kylin-usb-creator-1.0.0/src/main.cpp	2021-12-09 14:37:53.464467473 +0800
++++ kylin-usb-creator-1.0.0~/src/main.cpp	2021-12-09 15:20:46.315571642 +0800
+@@ -20,7 +20,6 @@
+     if(QGSettings::isSchemaInstalled(APPDATA))
+     {
+         QGSettings *p = new QGSettings(APPDATA);
+-//        p->get()
+         qDebug()<<"main.cpp activeMainwindow value:"<<p->get("mode").toString();
+         p->set("mode","stat4");
+         qDebug()<<"main.cpp after set value:"<<p->get("mode").toString();
+@@ -74,14 +73,14 @@
+ 
+ 
+     if(a.isRunning()){
+-//        a.sendMessage(nullptr);
+-        activeMainwindow();
++        a.sendMessage(QApplication::arguments().length() > 1 ? QApplication::arguments().at(0):a.applicationFilePath());
+         qDebug()<<"#### kylin-usb-creator is already running";
+         return EXIT_SUCCESS;
+     }else {
+         MainWindow w;
++        a.setActiveWindow(&w);
+         w.show();
+-//        QObject::connect(&a,SIGNAL(messageReceived(const QString&)),&w,SLOT(handleIconClickedSub(const QString&)));
++        QObject::connect(&a,SIGNAL(messageReceived(const QString&)),&w,SLOT(handleIconClickedSub()));
+         return a.exec();
+     }
+     a.setWindowIcon(QIcon(":data/logo/96.png"));
+diff -Naur kylin-usb-creator-1.0.0/src/mainwindow.cpp kylin-usb-creator-1.0.0~/src/mainwindow.cpp
+--- kylin-usb-creator-1.0.0/src/mainwindow.cpp	2021-12-09 14:37:53.465550821 +0800
++++ kylin-usb-creator-1.0.0~/src/mainwindow.cpp	2021-12-09 15:20:46.272237706 +0800
+@@ -161,11 +161,21 @@
+ }
+ void MainWindow::handleIconClickedSub()
+ {
+-    QRect availableGeometry = qApp->primaryScreen()->availableGeometry();
+-    this->move((availableGeometry.width() - this->width())/2, (availableGeometry.height() - this->height())/2);
+-    this->showNormal();
+-    this->raise();
+-    this->activateWindow();
++    qDebug()<<"handleIconClickedSub";
++//    QRect availableGeometry = qApp->primaryScreen()->availableGeometry();
++//    this->move((availableGeometry.width() - this->width())/2, (availableGeometry.height() - this->height())/2);
++//    this->showNormal();
++
++    Qt::WindowFlags flags = windowFlags();
++    flags |= Qt::WindowStaysOnTopHint;
++    setWindowFlags(flags);
++    show();
++    flags &= ~Qt::WindowStaysOnTopHint;
++    setWindowFlags(flags);
++    showNormal();
++
++//    this->raise();
++//    this->activateWindow();
+ 
+ }
+ 
+diff -Naur kylin-usb-creator-1.0.0/src/mainwindow.h kylin-usb-creator-1.0.0~/src/mainwindow.h
+--- kylin-usb-creator-1.0.0/src/mainwindow.h	2021-12-09 14:37:53.465550821 +0800
++++ kylin-usb-creator-1.0.0~/src/mainwindow.h	2021-12-09 15:20:46.250570738 +0800
+@@ -33,7 +33,7 @@
+     void makeStart(); //点击授权按钮后由页面1跳转到页面2
+     void makeFinish();
+     void returnMain();
+-//    void handleIconClickedSub(const QString&);
++    void handleIconClickedSub();
+ //    void passwdCheck();
+ private:
+     void init(); //初始化mainwindow相关的设置
+@@ -44,7 +44,7 @@
+     void initGsetting();
+     void setThemeStyle();
+ 
+-    void handleIconClickedSub();
++//    void handleIconClickedSub();
+     QTimer *dbustimer = nullptr;
+     QStackedWidget *stackedWidget= nullptr;
+     //页面小圆点
+diff -Naur kylin-usb-creator-1.0.0/src/qtsingleapplication.cpp kylin-usb-creator-1.0.0~/src/qtsingleapplication.cpp
+--- kylin-usb-creator-1.0.0/src/qtsingleapplication.cpp	2021-12-09 14:37:53.467717517 +0800
++++ kylin-usb-creator-1.0.0~/src/qtsingleapplication.cpp	2021-12-09 15:20:46.276571099 +0800
+@@ -284,13 +284,13 @@
+   \sa activateWindow(), messageReceived()
+ */
+ 
+-void QtSingleApplication::setActivationWindow(QWidget* aw, bool activateOnMessage)
++void QtSingleApplication::setActivationWindow(MainWindow* aw, bool activateOnMessage)
+ {
+     actWin = aw;
+     if (activateOnMessage)
+         connect(peer, SIGNAL(messageReceived(const QString&)), this, SLOT(activateWindow()));
+-    else
+-        disconnect(peer, SIGNAL(messageReceived(const QString&)), this, SLOT(activateWindow()));
++//    else
++//        disconnect(peer, SIGNAL(messageReceived(const QString&)), this, SLOT(activateWindow()));
+ }
+ 
+ 
+diff -Naur kylin-usb-creator-1.0.0/src/qtsingleapplication.h kylin-usb-creator-1.0.0~/src/qtsingleapplication.h
+--- kylin-usb-creator-1.0.0/src/qtsingleapplication.h	2021-12-09 14:37:53.467717517 +0800
++++ kylin-usb-creator-1.0.0~/src/qtsingleapplication.h	2021-12-09 15:20:46.244070647 +0800
+@@ -41,6 +41,7 @@
+ #ifndef QTSINGLEAPPLICATION_H
+ #define QTSINGLEAPPLICATION_H
+ 
++#include "mainwindow.h"
+ #include <QApplication>
+ 
+ class QtLocalPeer;
+@@ -80,7 +81,7 @@
+     bool isRunning();
+     QString id() const;
+ 
+-    void setActivationWindow(QWidget* aw, bool activateOnMessage = true);
++    void setActivationWindow(MainWindow* aw, bool activateOnMessage = true);
+     QWidget* activationWindow() const;
+ 
+     // Obsolete:
