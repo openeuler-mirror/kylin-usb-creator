@@ -1,6 +1,6 @@
 %define debug_package %{nil}
 Name:           kylin-usb-creator
-Version:        1.0.0
+Version:        1.1.1
 Release:        1
 Summary:        kylin-usb-creator
 License:        GPL-3+
@@ -13,6 +13,9 @@ BuildRequires:  qtchooser
 BuildRequires:  qt5-qtbase-devel
 BuildRequires:  pkgconf
 BuildRequires:  gsettings-qt-devel
+BuildRequires:  kf5-kwindowsystem-devel
+BuildRequires:  qt5-qtx11extras-devel
+BuildRequires:  polkit-qt5-1-devel
 
 # Requires: NetworkManager
 
@@ -45,7 +48,18 @@ rm -rf $RPM_BUILD_ROOT
 %{_datadir}/doc/kylin-usb-creator/changelog.gz
 %{_datadir}/doc/kylin-usb-creator/copyright
 %{_datadir}/pixmaps/kylin-usb-creator.png
+%{_sysconfdir}/dbus-1/system.d/com.kylinusbcreator.systemdbus.conf
+%{_bindir}/kylin-usb-creator-sysdbus
+%{_datadir}/dbus-1/system-services/com.kylinusbcreator.systemdbus.service
+%{_datadir}/glib-2.0/schemas/org.kylin-usb-creator-data.gschema.xml
+%{_datadir}/polkit-1/actions/com.kylinusbcreator.systemdbus.policy
+
+
+
 
 %changelog
+* Wed Mar 16 2022 tanyulong <tanyulong@kylinos.cn> - 1.1.1-1
+- update to upstream version 1.1.1
+
 * Tue Dec 15 2020 lvhan <lvhan@kylinos.cn> - 1.0.0-1
 - update to upstream version 1.0.0-26kord
