@@ -1,14 +1,11 @@
 %define debug_package %{nil}
 Name:           kylin-usb-creator
-Version:        1.0.0
-Release:        3
+Version:        1.1.1
+Release:        1
 Summary:        kylin-usb-creator
 License:        GPL-3+
 URL:            http://www.ukui.org
 Source0:        %{name}-%{version}.tar.gz
-
-patch0: 0001-add-dbus-service.patch
-patch1: fix-bug-min-window-logic.patch
 
 BuildRequires:  qt5-qttools-devel
 BuildRequires:  qt5-qtscript-devel
@@ -16,6 +13,9 @@ BuildRequires:  qtchooser
 BuildRequires:  qt5-qtbase-devel
 BuildRequires:  pkgconf
 BuildRequires:  gsettings-qt-devel
+BuildRequires:  kf5-kwindowsystem-devel
+BuildRequires:  qt5-qtx11extras-devel
+BuildRequires:  polkit-qt5-1-devel
 
 # Requires: NetworkManager
 
@@ -24,8 +24,6 @@ BuildRequires:  gsettings-qt-devel
 
 %prep
 %setup -q
-%patch0 -p1
-%patch1 -p1
 
 %build
 %{qmake_qt5} %{_qt5_qmake_flags} CONFIG+=enable-by-default  kylin-usb-creator.pro
@@ -50,13 +48,23 @@ rm -rf $RPM_BUILD_ROOT
 %{_datadir}/doc/kylin-usb-creator/changelog.gz
 %{_datadir}/doc/kylin-usb-creator/copyright
 %{_datadir}/pixmaps/kylin-usb-creator.png
+%{_sysconfdir}/dbus-1/system.d/com.kylinusbcreator.systemdbus.conf
+%{_bindir}/kylin-usb-creator-sysdbus
+%{_datadir}/dbus-1/system-services/com.kylinusbcreator.systemdbus.service
+%{_datadir}/glib-2.0/schemas/org.kylin-usb-creator-data.gschema.xml
+%{_datadir}/polkit-1/actions/com.kylinusbcreator.systemdbus.policy
+
+
+
 
 %changelog
+* Wed Mar 16 2022 tanyulong <tanyulong@kylinos.cn> - 1.1.1-1
+- update to upstream version 1.1.1
+
 * Fri Dec 10 2021 douyan <douyan@kylinos.cn> - 1.0.0-3
 - fix min window logic
 
 * Wed Dec 8 2021 douyan <douyan@kylinos.cn> - 1.0.0-2
 - add dbus service
-
 * Tue Dec 15 2020 lvhan <lvhan@kylinos.cn> - 1.0.0-1
 - update to upstream version 1.0.0-26kord
