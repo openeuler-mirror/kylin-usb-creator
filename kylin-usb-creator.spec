@@ -1,7 +1,6 @@
-%define debug_package %{nil}
 Name:           kylin-usb-creator
 Version:        1.1.1
-Release:        1
+Release:        2
 Summary:        kylin-usb-creator
 License:        GPL-3+
 URL:            http://www.ukui.org
@@ -58,6 +57,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Thu Dec 08 2022 fushanqing <fushanqing@kylinos.cn> - 1.1.1-2
+- Enable debuginfo for fix strip
+
 * Wed Mar 16 2022 tanyulong <tanyulong@kylinos.cn> - 1.1.1-1
 - update to upstream version 1.1.1
 
