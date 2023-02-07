@@ -1,7 +1,6 @@
-%define debug_package %{nil}
 Name:           kylin-usb-creator
 Version:        1.1.1
-Release:        1
+Release:        2
 Summary:        kylin-usb-creator
 License:        GPL-3+
 URL:            http://www.ukui.org
@@ -17,7 +16,6 @@ BuildRequires:  kf5-kwindowsystem-devel
 BuildRequires:  qt5-qtx11extras-devel
 BuildRequires:  polkit-qt5-1-devel
 
-# Requires: NetworkManager
 
 %description
  kylin-usb-creator
@@ -58,6 +56,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Feb 07 2023 peijiankang <peijiankang@kylinos.cn> - 1.1.1-2
+- add build debuginfo and debugsource
+
 * Wed Mar 16 2022 tanyulong <tanyulong@kylinos.cn> - 1.1.1-1
 - update to upstream version 1.1.1
 
