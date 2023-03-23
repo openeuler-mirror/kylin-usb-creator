@@ -1,11 +1,13 @@
 Name:           kylin-usb-creator
 Version:        1.1.1
-Release:        3
+Release:        4
 Summary:        kylin-usb-creator
 License:        GPL-3+
 URL:            http://www.ukui.org
 Source0:        %{name}-%{version}.tar.gz
+Source1:        %{name}-userM.tar.gz
 Patch01:        0001-fix-version-of-kylin-usb-creator.patch
+Patch02:        0002-add-kylin-user-guide-of-kylin-usb-creator.patch
 
 BuildRequires:  qt5-qttools-devel
 BuildRequires:  qt5-qtscript-devel
@@ -23,7 +25,9 @@ BuildRequires:  polkit-qt5-1-devel
 
 %prep
 %setup -q
+%setup -T -D -q -b 1
 %patch01 -p1
+%patch02 -p1
 
 %build
 %{qmake_qt5} %{_qt5_qmake_flags} CONFIG+=enable-by-default  kylin-usb-creator.pro
@@ -53,11 +57,15 @@ rm -rf $RPM_BUILD_ROOT
 %{_datadir}/dbus-1/system-services/com.kylinusbcreator.systemdbus.service
 %{_datadir}/glib-2.0/schemas/org.kylin-usb-creator-data.gschema.xml
 %{_datadir}/polkit-1/actions/com.kylinusbcreator.systemdbus.policy
+%{_datadir}/kylin-user-guide/data/guide/kylin-usb-creator
 
 
 
 
 %changelog
+* Wed Mar 22 2023 peijiankang <peijiankang@kylinos.cn> - 1.1.1-4
+- add kylin-user-guide of kylin-usb-creator
+
 * Wed Mar 22 2023 peijiankang <peijiankang@kylinos.cn> - 1.1.1-3
 - fix version of kylin-usb-creator
 

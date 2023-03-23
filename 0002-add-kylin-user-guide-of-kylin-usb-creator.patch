@@ -1,0 +1,42 @@
+From 6348fc1739588941cf8159560011792b0159c54d Mon Sep 17 00:00:00 2001
+From: peijiankang <peijiankang@kylinos.cn>
+Date: Wed, 22 Mar 2023 14:56:36 +0800
+Subject: [PATCH] add kylin-user-guide of kylin-usb-creator
+
+---
+ UIControl/UIControl.pro            | 5 ++++-
+ UIControl/src/include/menumodule.h | 2 +-
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/UIControl/UIControl.pro b/UIControl/UIControl.pro
+index 1f9cdde..dfe69b0 100644
+--- a/UIControl/UIControl.pro
++++ b/UIControl/UIControl.pro
+@@ -62,7 +62,10 @@ schemes.path = /usr/share/glib-2.0/schemas/
+ desktop.path = /usr/share/applications
+ desktop.files = kylin-usb-creator.desktop
+ 
+-INSTALLS += target desktop icons schemes
++userM.path = /usr/share/kylin-user-guide/data/guide/kylin-usb-creator/
++userM.files += ../userM/*
++
++INSTALLS += target desktop icons schemes userM
+ CONFIG += link_pkgconfig
+ 
+ PKGCONFIG += gsettings-qt
+diff --git a/UIControl/src/include/menumodule.h b/UIControl/src/include/menumodule.h
+index d9deeb2..3eeefb6 100644
+--- a/UIControl/src/include/menumodule.h
++++ b/UIControl/src/include/menumodule.h
+@@ -55,7 +55,7 @@ public:
+ 
+ public:
+ //    程序在实例化的时候需要传递的信息字段,打开debug开关后这些字段会被自动填充
+-    QString appName = "tools/kylin-usb-creator"; //格式kylin-usb-creator
++    QString appName = "kylin-usb-creator"; //格式kylin-usb-creator
+     QString appVersion = "1.1.1";
+     QString appDesc = "appDesc字段未填充!";
+     QString iconPath = ":/data/kylin-usb-creator.svg";
+-- 
+2.39.1
+
