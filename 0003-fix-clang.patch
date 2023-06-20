@@ -1,0 +1,12 @@
+diff -u -r kylin-usb-creator-1.1.2/UIControl/src/include/menumodule.cpp kylin-usb-creator-1.1.2/UIControl/src/include/menumodule.cpp
+--- kylin-usb-creator-1.1.2/UIControl/src/include/menumodule.cpp	2022-03-17 10:32:06.000000000 +0800
++++ kylin-usb-creator-1.1.2/UIControl/src/include/menumodule.cpp	2023-06-17 20:51:55.000000000 +0800
+@@ -17,7 +17,7 @@
+  */
+ #include "menumodule.h"
+ #include "xatom-helper.h"
+-menuModule::menuModule(QWidget *parent = nullptr) : QWidget(parent)
++menuModule::menuModule(QWidget *parent) : QWidget(parent)
+ {
+     init();
+ }
